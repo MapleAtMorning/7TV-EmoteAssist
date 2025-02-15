@@ -1,4 +1,4 @@
-const { EmbedBuilder, MessageFlags } = require('discord.js');
+const { EmbedBuilder, MessageFlags, InteractionContextType } = require('discord.js');
 const { SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
 const fs = require('node:fs');
 
@@ -40,7 +40,7 @@ module.exports = {
         .setName('upload')
         .setDescription('Upload either an emote or emoteset from 7TV using their ID')
         .setDefaultMemberPermissions(PermissionFlagsBits.CreateGuildExpressions)
-        // .setContexts(InteractionContextType.Guild)
+        .setContexts(InteractionContextType.Guild)
         .addSubcommand(subcommand =>
             subcommand
                 .setName('emote')
@@ -49,7 +49,11 @@ module.exports = {
                     option
                         .setName('id')
                         .setRequired(true)
-                        .setDescription('An emote\'s 7TV ID')))
+                        .setDescription('An emote\'s 7TV ID'))
+                .addBooleanOption(option =>
+                    option
+                        .setName('replace')
+                        .setDescription('Replace an existing emote with the same name')))
         .addSubcommand(subcommand =>
             subcommand
                 .setName('emoteset')
@@ -66,7 +70,6 @@ module.exports = {
         if (interaction.options.getSubcommand() === 'emote') {
             await interaction.deferReply();
             let response = await fetchEmoteData(id);
-            console.log(response);
             if (!response["data"]) {
                 const unsuccessfulUploadEmbed = new EmbedBuilder()
                     .setColor('#ff9900')
@@ -81,12 +84,30 @@ module.exports = {
             let aspectRatio = response["aspectRatio"];
             let animated = response["flags"]["animated"];
 
+            // Check if an emote already exists with the same name
+            let guildEmojis = await interaction.guild.emojis.fetch()
+            console.log(guildEmojis)
+            let existingGuildEmoji = guildEmojis.find(emoji => emoji.name === name)
+            console.log(existingGuildEmoji)
+
+            if (existingGuildEmoji) {
+                if (!interaction.options.getBoolean('replace')) {
+                    const unsuccessfulUploadEmbed = new EmbedBuilder()
+                        .setColor('#ff9900')
+                        .setTitle(`Emote already exists`)
+                        .setDescription(`Failed to upload the emote as an emote with the same name of \"${name}\" already exists in this server. Please use the replace option to replace the existing emote.`)
+                    await interaction.followUp({ embeds: [unsuccessfulUploadEmbed], flags: MessageFlags.Ephemeral });
+                    return;
+                }
+                interaction.guild.emojis.delete(existingGuildEmoji)
+            }
+
             let newMoji = await uploadEmote(name, id, animated, aspectRatio, interaction.guild);
             if (newMoji === false || !newMoji) {
                 await interaction.reply('There was an error uploading the emote.');
                 return;
             }
-            console.log(newMoji);
+
             let extensionType = newMoji.animated ? "gif" : "png";
             const successfulUploadEmbed = new EmbedBuilder()
                 .setColor('#00ff99')
@@ -102,6 +123,8 @@ module.exports = {
 
 
         } else if (interaction.options.getSubcommand() === 'emoteset') {
+            let emojis = interaction.guild.emojis.fetch()
+            console.log(`There are ${emojis.size} emojis.`)
             await interaction.reply(`emoteset id: ${id}`);
         }
     },
