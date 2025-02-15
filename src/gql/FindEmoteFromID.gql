@@ -1,0 +1,11 @@
+query FindEmoteFromID($emoteID: Id!) {
+  emotes {
+    emote(id: $emoteID) {
+      defaultName
+      aspectRatio
+      flags {
+        animated
+      }
+    }
+  }
+}

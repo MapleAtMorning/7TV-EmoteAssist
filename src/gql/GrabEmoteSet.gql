@@ -1,0 +1,22 @@
+query GrabEmoteSet($emoteID: Id!) {
+  emoteSets {
+    emoteSet(id: $emoteID) {
+      emotes {
+        items {
+          emote {
+            id
+            defaultName
+            aspectRatio
+            flags {
+              animated
+              defaultZeroWidth
+            }
+            images {
+              url
+            }
+          }
+        }
+      }
+    }
+  }
+}

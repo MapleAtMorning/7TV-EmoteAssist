@@ -1,0 +1,20 @@
+query FindUserFromName($user: String!) {
+  users {
+    search(query: $user) {
+      items {
+        mainConnection {
+          platform
+          platformUsername
+          platformAvatarUrl
+        }
+        roles {
+          name
+        }
+        id
+        style {
+          activeEmoteSetId
+        }
+      }
+    }
+  }
+}
