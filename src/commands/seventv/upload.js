@@ -4,7 +4,7 @@ const fs = require('node:fs');
 
 async function uploadEmote(name, id, animated, aspectratio, guild) {
     let url;
-    if (aspectratio >= 1.25) { return false; }
+    // TODO: Attempt to upload higher quality gif, and if it fails then upload the lower quality gif.
     if (animated) {
         url = `https://cdn.7tv.app/emote/${id}/1x.gif`;
     } else {
@@ -12,16 +12,31 @@ async function uploadEmote(name, id, animated, aspectratio, guild) {
     }
 
     try {
-        let newmoji = guild.emojis.create({ attachment: `${url}`, name: `${name}` })
+        let newmoji = await guild.emojis.create({ attachment: `${url}`, name: `${name}` })
         return newmoji;
     } catch (error) {
-        console.log(error);
+        console.warn("Error with uploading emoji, error below: \n", error);
         return false;
     }
 }
 
 async function fetchEmoteData(emoteID) {
     const query = fs.readFileSync('src/gql/FindEmoteFromID.gql', 'utf8');
+    let response = await fetch('https://7tv.io/v4/gql', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            query,
+            variables: { emoteID },
+        }),
+    })
+    return response.json();
+}
+
+async function fetchEmoteSetData(emoteID) {
+    const query = fs.readFileSync('src/gql/GrabEmoteSet.gql', 'utf8');
     let response = await fetch('https://7tv.io/v4/gql', {
         method: 'POST',
         headers: {
@@ -69,13 +84,15 @@ module.exports = {
 
         if (interaction.options.getSubcommand() === 'emote') {
             await interaction.deferReply();
+
             let response = await fetchEmoteData(id);
+            // If no data, aka ID is invalid then return and send an error message.
             if (!response["data"]) {
                 const unsuccessfulUploadEmbed = new EmbedBuilder()
-                    .setColor('#ff9900')
+                    .setColor('#f34747')
                     .setTitle(`ID not found`)
                     .setDescription(`Failed to upload the emote!`)
-                await interaction.followUp({ embeds: [unsuccessfulUploadEmbed], flags: MessageFlags.Ephemeral });
+                await interaction.followUp({ embeds: [unsuccessfulUploadEmbed] });
                 return;
             }
 
@@ -84,30 +101,29 @@ module.exports = {
             let aspectRatio = response["aspectRatio"];
             let animated = response["flags"]["animated"];
 
-            // Check if an emote already exists with the same name
+            // Check if an emote already exists with the same name in the guild
             let guildEmojis = await interaction.guild.emojis.fetch()
-            console.log(guildEmojis)
             let existingGuildEmoji = guildEmojis.find(emoji => emoji.name === name)
-            console.log(existingGuildEmoji)
-
             if (existingGuildEmoji) {
                 if (!interaction.options.getBoolean('replace')) {
                     const unsuccessfulUploadEmbed = new EmbedBuilder()
-                        .setColor('#ff9900')
+                        .setColor('#f34747')
                         .setTitle(`Emote already exists`)
                         .setDescription(`Failed to upload the emote as an emote with the same name of \"${name}\" already exists in this server. Please use the replace option to replace the existing emote.`)
-                    await interaction.followUp({ embeds: [unsuccessfulUploadEmbed], flags: MessageFlags.Ephemeral });
+                    await interaction.followUp({ embeds: [unsuccessfulUploadEmbed] });
                     return;
                 }
                 interaction.guild.emojis.delete(existingGuildEmoji)
             }
 
+            // Attempt to upload the emote to the server with the uploadEmote() function
             let newMoji = await uploadEmote(name, id, animated, aspectRatio, interaction.guild);
             if (newMoji === false || !newMoji) {
                 await interaction.reply('There was an error uploading the emote.');
                 return;
             }
 
+            // If the emote was successfully uploaded, send a success message with the emote's details
             let extensionType = newMoji.animated ? "gif" : "png";
             const successfulUploadEmbed = new EmbedBuilder()
                 .setColor('#00ff99')
@@ -123,9 +139,121 @@ module.exports = {
 
 
         } else if (interaction.options.getSubcommand() === 'emoteset') {
-            let emojis = interaction.guild.emojis.fetch()
-            console.log(`There are ${emojis.size} emojis.`)
-            await interaction.reply(`emoteset id: ${id}`);
+            await interaction.deferReply();
+
+            let staticGuildEmoteSlots, animatedGuildEmoteSlots, staticEmoteSetSlots, animatedEmoteSetSlots;
+
+            // Set the amount of slots available in the server depending on the server's boost level
+            if (interaction.guild.premiumTier === 0) {
+                staticGuildEmoteSlots = animatedGuildEmoteSlots = 50;
+            } else if (interaction.guild.premiumTier === 1) {
+                staticGuildEmoteSlots = animatedGuildEmoteSlots = 100;
+            } else if (interaction.guild.premiumTier === 2) {
+                staticGuildEmoteSlots = animatedGuildEmoteSlots = 150;
+            } else if (interaction.guild.premiumTier === 3) {
+                staticGuildEmoteSlots = animatedGuildEmoteSlots = 250;
+            }
+
+            // Lower the amount of slots available depending on how many emotes are already in the server
+            let guildEmojis = await interaction.guild.emojis.fetch()
+            guildEmojis.forEach(emoji => {
+                if (emoji.animated) {
+                    animatedGuildEmoteSlots--;
+                } else {
+                    staticGuildEmoteSlots--;
+                }
+            });
+
+            // If the ID is invalid, return and send an error message.
+            // let response = JSON.parse(fs.readFileSync('src/gql/testdata.json', 'utf8'));
+            let response = await fetchEmoteSetData(id);
+            if (!response["data"]) {
+                const unsuccessfulUploadEmbed = new EmbedBuilder()
+                    .setColor('#f34747')
+                    .setTitle(`EmoteSet not found`)
+                    .setDescription(`Failed to find the EmoteSet!`)
+                await interaction.followUp({ embeds: [unsuccessfulUploadEmbed] });
+                return;
+            }
+            // Trim response down to the emotes array
+            response = response["data"]["emoteSets"]["emoteSet"]["emotes"]["items"];
+            animatedEmoteSetSlots = staticEmoteSetSlots = 0;
+
+            // Check how many emotes are in the emote set and divide them into animated and static.
+            response.forEach(async emote => {
+                emote = emote["emote"];
+                let existingGuildEmoji = guildEmojis.find(emoji => emoji.name === emote.defaultName)
+                // TODO: Tweak this line later to allow for zero width emotes when parameter is true.
+                if (!existingGuildEmoji && emote["flags"].defaultZeroWidth === false) {
+                    if (emote["flags"].animated) {
+                        animatedEmoteSetSlots++;
+                    } else {
+                        staticEmoteSetSlots++;
+                    }
+                }
+            });
+
+            // If there's not enough slots in the server, return and send an error message.
+            if (staticGuildEmoteSlots < staticEmoteSetSlots || animatedGuildEmoteSlots < animatedEmoteSetSlots) {
+                const unsuccessfulUploadEmbed = new EmbedBuilder()
+                    .setColor('#f34747')
+                    .setTitle(`Too many emotes`)
+                    .setDescription(`You're attempting to upload an emote set with more emotes than you have slots in your server. Please remove some emotes from the server or choose a smaller emote set.`)
+                await interaction.followUp({ embeds: [unsuccessfulUploadEmbed] });
+                return;
+            }
+
+            let uploadedEmoteString = "";
+            let failedUploadsString = "";
+
+            const startingEmbed = new EmbedBuilder()
+                .setColor('#f3d147')
+                .setTitle(`Uploading Emote Set`)
+                .setDescription(`Uploading emotes... ${uploadedEmoteString}`)
+                .addFields(
+                    { name: 'Failed Uploads', value: `${failedUploadsString}` }
+                )
+            await interaction.followUp({ embeds: [startingEmbed] })
+
+            for (let ctr = 0; response.length > ctr; ctr++) {
+                let emote = response[ctr]["emote"];
+                console.log(response.length, ctr)
+                console.log(emote.defaultName)
+                console.log(emote)
+                let existingGuildEmoji = guildEmojis.find(emoji => emoji.name === emote.defaultName)
+                // TODO: Tweak this line later to allow for zero width emotes when parameter is true.
+                if (!existingGuildEmoji && emote["flags"].defaultZeroWidth === false) {
+                    let newMoji = await uploadEmote(emote.defaultName, emote.id, emote["flags"].animated, emote.aspectRatio, interaction.guild);
+                    if (newMoji === false || !newMoji) {
+                        uploadedEmoteString += `❌`
+                        failedUploadsString += `${emote.defaultName}\n`
+                    } else {
+                        uploadedEmoteString += `${newMoji}`
+                    }
+                }
+
+                // For each loop, set the updating embed as the message except for the last loop where it sends the finished embed.
+                if (response.length-1 > ctr) {
+                    const updatingEmbed = new EmbedBuilder()
+                        .setColor('#f3d147')
+                        .setTitle(`Uploading Emote Set`)
+                        .setDescription(`Uploading emotes... ${uploadedEmoteString}`)
+                        .addFields(
+                            { name: 'Failed Uploads', value: `${failedUploadsString}` }
+                        )
+                    await interaction.editReply({ embeds: [updatingEmbed] })
+                } else {
+                    if (failedUploadsString == "") { failedUploadsString = "None!" }
+                    const finishedEmbed = new EmbedBuilder()
+                        .setColor('#00ff99')
+                        .setTitle(`Emote Set Uploaded`)
+                        .setDescription(`Emotes Uploaded! ${uploadedEmoteString}`)
+                        .addFields(
+                            { name: 'Failed Uploads', value: `${failedUploadsString}` }
+                        )
+                    await interaction.editReply({ embeds: [finishedEmbed] })
+                }
+            }
         }
     },
 };
