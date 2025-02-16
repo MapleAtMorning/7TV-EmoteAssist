@@ -65,6 +65,10 @@ module.exports = {
                         .setName('id')
                         .setRequired(true)
                         .setDescription('An emote\'s 7TV ID'))
+                .addStringOption(option =>
+                    option
+                        .setName('name')
+                        .setDescription('Change the name of the emote'))
                 .addBooleanOption(option =>
                     option
                         .setName('replace')
@@ -91,13 +95,18 @@ module.exports = {
                 const unsuccessfulUploadEmbed = new EmbedBuilder()
                     .setColor('#f34747')
                     .setTitle(`ID not found`)
-                    .setDescription(`Failed to upload the emote!`)
+                    .setDescription(`Failed to find the emote!`)
                 await interaction.followUp({ embeds: [unsuccessfulUploadEmbed] });
                 return;
             }
 
             response = response["data"]["emotes"]["emote"];
-            let name = response["defaultName"];
+            let name;
+            if (interaction.options.getString('name')) {
+                name = interaction.options.getString('name');
+            } else {
+                name = response["defaultName"];
+            }
             let aspectRatio = response["aspectRatio"];
             let animated = response["flags"]["animated"];
 
@@ -118,8 +127,13 @@ module.exports = {
 
             // Attempt to upload the emote to the server with the uploadEmote() function
             let newMoji = await uploadEmote(name, id, animated, aspectRatio, interaction.guild);
+            console.log(newMoji)
             if (newMoji === false || !newMoji) {
-                await interaction.reply('There was an error uploading the emote.');
+                const unsuccessfulUploadEmbed = new EmbedBuilder()
+                    .setColor('#f34747')
+                    .setTitle(`Emote failed to upload`)
+                    .setDescription(`This could be due to the name not fitting Discord's restraints or some other issue. Try replacing the name.`)
+                await interaction.followUp({ embeds: [unsuccessfulUploadEmbed] });
                 return;
             }
 
@@ -233,7 +247,7 @@ module.exports = {
                 }
 
                 // For each loop, set the updating embed as the message except for the last loop where it sends the finished embed.
-                if (response.length-1 > ctr) {
+                if (response.length - 1 > ctr) {
                     const updatingEmbed = new EmbedBuilder()
                         .setColor('#f3d147')
                         .setTitle(`Uploading Emote Set`)
