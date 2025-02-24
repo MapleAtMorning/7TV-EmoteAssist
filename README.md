@@ -6,6 +6,8 @@
 
 </div>
 
+# [INVITE ME](https://discord.com/oauth2/authorize?client_id=1340081679615787201&permissions=8797166782464&integration_type=0&scope=bot)
+
 # How to use
 1. Find the emote you want from 7TV and head up to the url of the emote you'd like to add to your server. In this example, the ID for the "hello" emote is [01GQYNVYV8000AH5YBCSXQWPT3](https://7tv.app/emotes/01GQYNVYV8000AH5YBCSXQWPT3).
 
