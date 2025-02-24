@@ -6,6 +6,25 @@
 
 </div>
 
+# How to use
+1. Find the emote you want from 7TV and head up to the url of the emote you'd like to add to your server. In this example, the ID for the "hello" emote is [01GQYNVYV8000AH5YBCSXQWPT3](https://7tv.app/emotes/01GQYNVYV8000AH5YBCSXQWPT3).
+
+  ![https://7tv.app/emotes/01GQYNVYV8000AH5YBCSXQWPT3](https://github.com/user-attachments/assets/8815d9a5-71a6-438a-a2dd-51ae1579af65)
+   
+3. Back in Discord, we'll start the command by writing ``/upload emote`` and opening the ID field. This is where you'll post in the emote ID gathered before.
+
+  ![/upload emote id:01GQYNVYV8000AH5YBCSXQWPT3](https://github.com/user-attachments/assets/ddbff37a-549c-44f3-8581-a21809cb00a5)
+
+4. In this test case we'd like to set a custom name for it as well. For this we'll add the argument of Name and fill it with 'Hiii'.
+
+  ![/upload emote id:01GQYNVYV8000AH5YBCSXQWPT3 name:Hiii](https://github.com/user-attachments/assets/7f43034f-5787-4f2c-aedf-1fde506f8a73)
+
+6. Now after pressing enter, you'll likely see a confirmation message showing the emote name and image, along with it's Discord ID and if it's animated or not.
+
+  ![Successfully uploaded the emote!](https://github.com/user-attachments/assets/6a029a75-6178-479d-95e6-d36ccdfeb79d)
+
+Uploading an emoteset is fundamentally the same process, just using ``/upload emoteset`` instead
+
 # How to setup
 Requirements: ```NodeJS / NPM```
 
